@@ -1,43 +1,69 @@
 package com.taskManagerService.api;
 
 import com.taskManagerService.exception.ApiException;
+import com.taskManagerService.exception.BadGatewayException;
+import com.taskManagerService.exception.FieldIssue;
+import com.taskManagerService.exception.ValidationException;
 
-/**
- * INSTRUCTOR-PROVIDED SIGNATURES ONLY (Step 3) - students write the bodies.
- *
- * The one place where the error shape is built. Target shape:
- *
- * {
- *   "error": {
- *     "code": "VALIDATION_ERROR",
- *     "message": "Validation failed",
- *     "details": [ { "field": "title", "issue": "must not be empty" } ]
- *   }
- * }
- *
- * Hints:
- *  - Build the body with LinkedHashMap / ArrayList (see ListMapEnumPrimer).
- *  - "code" and "message" are ALWAYS Strings.
- *  - "details" is only filled for ValidationException (use instanceof);
- *    for every other exception send an empty list.
- *  - The ApiResponse status comes from e.getStatus().
- *
- * When you copy this into your own project, change the package line to: package api;
- */
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 public class ErrorResponseFactory {
 
-    private ErrorResponseFactory() {
+    public static ApiResponse from(ApiException exception) {
+
+        Map<String, Object> error = new LinkedHashMap<>();
+
+        error.put("code", exception.getCode());
+        error.put("message", exception.getMessage());
+
+        List<Map<String, String>> details = new ArrayList<>();
+
+        if (exception instanceof ValidationException validationException) {
+
+            addFieldIssues(details, validationException.getIssues());
+
+        } else if (exception instanceof BadGatewayException badGatewayException) {
+
+            addFieldIssues(details, badGatewayException.getIssues());
+        }
+
+        error.put("details", details);
+
+        Map<String, Object> responseBody = new LinkedHashMap<>();
+        responseBody.put("error", error);
+
+        return new ApiResponse(exception.getStatus(), responseBody);
     }
 
-    /** Known failure (400 / 404 / 422 / 502 / 503). */
-    public static ApiResponse from(ApiException e) {
-        // TODO (student): build the error body and return new ApiResponse(e.getStatus(), body)
-        throw new UnsupportedOperationException("not implemented yet");
+    public static ApiResponse fromUnexpected(Exception exception) {
+
+        Map<String, Object> error = new LinkedHashMap<>();
+
+        error.put("code", "INTERNAL_ERROR");
+        error.put("message", "An unexpected error occurred");
+        error.put("details", new ArrayList<>());
+
+        Map<String, Object> responseBody = new LinkedHashMap<>();
+        responseBody.put("error", error);
+
+        return new ApiResponse(500, responseBody);
     }
 
-    /** Anything unexpected: 500, code "INTERNAL_ERROR", same shape. Never leak a stack trace. */
-    public static ApiResponse fromUnexpected(Exception e) {
-        // TODO (student)
-        throw new UnsupportedOperationException("not implemented yet");
+    private static void addFieldIssues(
+            List<Map<String, String>> details,
+            List<FieldIssue> issues) {
+
+        for (FieldIssue issue : issues) {
+
+            Map<String, String> fieldDetail = new LinkedHashMap<>();
+
+            fieldDetail.put("field", issue.getField());
+            fieldDetail.put("issue", issue.getIssue());
+
+            details.add(fieldDetail);
+        }
     }
 }
