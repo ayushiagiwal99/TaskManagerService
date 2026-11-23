@@ -42,6 +42,49 @@ public class Task {
         return new Task(id, draft);
     }
 
+    public String getTitle() {
+        return title;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public boolean isCompleted() {
+        return completed;
+    }
+
+    public String getDueDate() {
+        return dueDate;
+    }
+
+    public TaskPriority getPriority() {
+        return priority;
+    }
+
+    public int getParentId() {
+        return parentId;
+    }
+
+    public long getCreatedAt() {
+        return createdAt;
+    }
+
+    @Override
+    public String toString() {
+        return
+            "Task{" +
+            "id=" + id +
+            ", title='" + title + '\'' +
+            ", description='" + description + '\'' +
+            ", completed=" + completed +
+            ", dueDate='" + dueDate + '\'' +
+            ", priority=" + priority +
+            ", parentId=" + parentId +
+            ", createdAt=" + createdAt +
+            '}';
+    }
+
     public static class Builder {
         private int id;
 

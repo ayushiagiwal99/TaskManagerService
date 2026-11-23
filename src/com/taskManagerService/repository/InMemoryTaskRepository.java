@@ -10,7 +10,6 @@ public class InMemoryTaskRepository implements TaskRepository {
 
     private static final InMemoryTaskRepository INSTANCE = new InMemoryTaskRepository();
     private final Map<Integer, Task> tasks = new HashMap<>();
-
     private final AtomicInteger idGenerator = new AtomicInteger(1);
 
     // Private constructor prevents external instantiation.
