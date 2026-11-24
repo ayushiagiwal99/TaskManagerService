@@ -1,16 +1,15 @@
 package com.taskManagerService.service;
 
+import com.taskManagerService.exception.*;
 import com.taskManagerService.model.Task;
 import com.taskManagerService.model.TaskDraft;
 import com.taskManagerService.enums.TaskPriority;
 import com.taskManagerService.api.TaskRequest;
 import com.taskManagerService.api.TaskQuery;
 import com.taskManagerService.parser.TaskParser;
-//import com.taskManagerService.parser.ParsedTask;
-import com.taskManagerService.exception.FieldIssue;
-import com.taskManagerService.exception.ValidationException;
-import com.taskManagerService.exception.NotFoundException;
+import com.taskManagerService.parser.ParsedTask;
 import com.taskManagerService.repository.TaskRepository;
+import com.taskManagerService.utils.DateHelper;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -74,41 +73,39 @@ public class TaskService {
         return taskRepository.delete(task.getId());
     }
 
-    public Task createTaskFromText(String text) {
-            // TODO
-            return new Task.Builder("title", "description", false).build();
-//        String apiKey = System.getenv("LLM_API_KEY");
-//
-//        if (apiKey == null || apiKey.isBlank()) {
-//            throw new ServiceUnavailableException("LLM API key is missing");
-//        }
-//
-//        try {
-//            String today = LocalDate.now().toString();
-//
-//            ParsedTask parsedTask = taskParser.parse(text, today);
-//
-//            TaskRequest request = new TaskRequest(
-//                    parsedTask.getTitle(),
-//                    parsedTask.getDescription(),
-//                    "false",
-//                    parsedTask.getDueDate(),
-//                    "MEDIUM"
-//            );
-//
-//            TaskDraft draft = validateAndCreateDraft(request);
-//
-//            return taskRepository.save(draft);
-//
-//        } catch (ValidationException exception) {
-//            throw new BadGatewayException(
-//                    "LLM returned invalid task data"
-//            );
-//        } catch (Exception exception) {
-//            throw new BadGatewayException(
-//                    "Failed to generate task using LLM"
-//            );
-//        }
+    public Task createTaskFromText(String text, String idempotencyKey) {
+
+        String today = DateHelper.today();
+
+        ParsedTask parsedTask;
+
+        try {
+            parsedTask = taskParser.parse(text, today);
+        } catch (Exception e) {
+            if (e instanceof ApiException apiException) {
+                throw apiException;
+            }
+
+            throw new BadGatewayException("Failed to generate task using LLM");
+        }
+
+        TaskRequest request = new TaskRequest(
+                parsedTask.getTitle(),
+                parsedTask.getDescription(),
+                "false",
+                parsedTask.getDueDate(),
+                "MEDIUM"
+        );
+
+        TaskDraft draft;
+
+        try {
+            draft = validateAndCreateDraft(request);
+        } catch (ValidationException e) {
+            throw new BadGatewayException("LLM returned an invalid task");
+        }
+
+        return taskRepository.save(draft);
     }
 
     private TaskDraft validateAndCreateDraft(TaskRequest request) {

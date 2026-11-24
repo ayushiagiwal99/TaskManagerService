@@ -21,7 +21,7 @@ public class TaskApi {
         try {
             Task task = taskService.createTask(request);
 
-            return new ApiResponse(201, task.toMap());
+            return new ApiResponse(201, task);
 
         } catch (ApiException exception) {
             return ErrorResponseFactory.from(exception);
@@ -36,7 +36,7 @@ public class TaskApi {
         try {
             Task task = taskService.getTask(id);
 
-            return new ApiResponse(200, task.toMap());
+            return new ApiResponse(200, task);
 
         } catch (ApiException exception) {
             return ErrorResponseFactory.from(exception);
@@ -91,20 +91,18 @@ public class TaskApi {
         }
     }
 
-    public ApiResponse createTaskFromText(
-            String text,
-            String idempotencyKey) {
+    public ApiResponse createTaskFromText(String text, String idempotencyKey) {
 
         try {
-            Task task = taskService.createTaskFromText(text);
+            Task task = taskService.createTaskFromText(text, idempotencyKey);
 
             return new ApiResponse(201, task);
 
-        } catch (ApiException exception) {
-            return ErrorResponseFactory.from(exception);
+        } catch (ApiException e) {
+            return ErrorResponseFactory.from(e);
 
-        } catch (Exception exception) {
-            return ErrorResponseFactory.fromUnexpected(exception);
+        } catch (Exception e) {
+            return ErrorResponseFactory.fromUnexpected(e);
         }
     }
 }
