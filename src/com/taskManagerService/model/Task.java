@@ -23,7 +23,7 @@ public class Task {
         this.dueDate = builder.dueDate;
         this.priority = builder.priority;
         this.parentId = builder.parentId;
-        this.createdAt = System.currentTimeMillis();
+        this.createdAt = builder.createdAt > 0 ? builder.createdAt : System.currentTimeMillis();
     }
 
     private Task(int id, TaskDraft draft) {
@@ -40,6 +40,24 @@ public class Task {
     public static Task createPersistedTask(int id, TaskDraft draft) {
         InputValidator.validatePositiveNumber(id, "Task ID");
         return new Task(id, draft);
+    }
+
+    public static Task createUpdatedTask(Task existingTask, TaskDraft draft) {
+        return new Builder(
+            draft.getTitle(),
+            draft.getDescription(),
+            draft.isCompleted()
+        )
+        .id(existingTask.id)
+        .dueDate(draft.getDueDate())
+        .priority(draft.getPriority())
+        .parentId(existingTask.parentId)
+        .createdAt(existingTask.createdAt)
+        .build();
+    }
+
+    public int getId() {
+        return id;
     }
 
     public String getTitle() {
@@ -96,10 +114,22 @@ public class Task {
         private TaskPriority priority = TaskPriority.MEDIUM;
         private int parentId;
 
+        private long createdAt;
+
         public Builder(String title, String description, boolean completed) {
             this.title = title;
             this.description = description;
             this.completed = completed;
+        }
+
+        public Builder id(int id) {
+            this.id = id;
+            return this;
+        }
+
+        public Builder createdAt(long createdAt) {
+            this.createdAt = createdAt;
+            return this;
         }
 
         public Builder dueDate(String dueDate) {

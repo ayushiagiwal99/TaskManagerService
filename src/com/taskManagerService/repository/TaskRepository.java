@@ -15,4 +15,6 @@ public interface TaskRepository {
     List<Task> findAll();
 
     boolean delete(int id);
+
+    Task update(Task updatedTask);
 }

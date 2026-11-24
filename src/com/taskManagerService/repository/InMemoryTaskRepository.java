@@ -1,5 +1,6 @@
 package com.taskManagerService.repository;
 
+import com.taskManagerService.exception.NotFoundException;
 import com.taskManagerService.model.Task;
 import com.taskManagerService.model.TaskDraft;
 
@@ -42,6 +43,15 @@ public class InMemoryTaskRepository implements TaskRepository {
     @Override
     public boolean delete(int id) {
         return tasks.remove(id) != null;
+    }
+
+    @Override
+    public Task update(Task updatedTask) {
+        if (!tasks.containsKey(updatedTask.getId())) {
+            throw new NotFoundException("Task not found");
+        }
+        tasks.put(updatedTask.getId(), updatedTask);
+        return updatedTask;
     }
 }
 
