@@ -1,10 +1,13 @@
 package com.taskManagerService.api;
 
 import com.taskManagerService.model.Task;
+import com.taskManagerService.model.TaskQuery;
+import com.taskManagerService.model.TaskRequest;
 import com.taskManagerService.service.TaskService;
 import com.taskManagerService.exception.ApiException;
 
 import java.util.List;
+import java.util.Map;
 
 public class TaskApi {
 
@@ -97,6 +100,60 @@ public class TaskApi {
             Task task = taskService.createTaskFromText(text, idempotencyKey);
 
             return new ApiResponse(201, task);
+
+        } catch (ApiException e) {
+            return ErrorResponseFactory.from(e);
+
+        } catch (Exception e) {
+            return ErrorResponseFactory.fromUnexpected(e);
+        }
+    }
+
+    public ApiResponse createSubtask(int parentId, TaskRequest request) {
+
+        try {
+            Task task = taskService.createSubtask(parentId, request);
+
+            return new ApiResponse(201, task.toString());
+
+        } catch (ApiException e) {
+            return ErrorResponseFactory.from(e);
+
+        } catch (Exception e) {
+            return ErrorResponseFactory.fromUnexpected(e);
+        }
+    }
+
+    public ApiResponse listSubtasks(int parentId) {
+
+        try {
+            List<Task> subtasks = taskService.listSubtasks(parentId);
+
+            List<String> response = subtasks.stream()
+                    .map(Task::toString)
+                    .toList();
+
+            return new ApiResponse(200, response);
+
+        } catch (ApiException e) {
+            return ErrorResponseFactory.from(e);
+
+        } catch (Exception e) {
+            return ErrorResponseFactory.fromUnexpected(e);
+        }
+    }
+
+    public ApiResponse breakDownTask(int id, String idempotencyKey) {
+
+        try {
+            List<Task> subtasks =
+                    taskService.breakDownTask(id, idempotencyKey);
+
+            List<String> response = subtasks.stream()
+                    .map(Task::toString)
+                    .toList();
+
+            return new ApiResponse(201, response);
 
         } catch (ApiException e) {
             return ErrorResponseFactory.from(e);

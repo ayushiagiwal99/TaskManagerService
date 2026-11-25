@@ -1,4 +1,4 @@
-package com.taskManagerService.api;
+package com.taskManagerService.model;
 
 public class TaskRequest {
 

@@ -4,8 +4,9 @@ import com.taskManagerService.exception.*;
 import com.taskManagerService.model.Task;
 import com.taskManagerService.model.TaskDraft;
 import com.taskManagerService.enums.TaskPriority;
-import com.taskManagerService.api.TaskRequest;
-import com.taskManagerService.api.TaskQuery;
+import com.taskManagerService.model.TaskRequest;
+import com.taskManagerService.model.TaskQuery;
+import com.taskManagerService.parser.BreakdownStrategy;
 import com.taskManagerService.parser.TaskParser;
 import com.taskManagerService.parser.ParsedTask;
 import com.taskManagerService.repository.TaskRepository;
@@ -21,10 +22,16 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final TaskParser taskParser;
+    private final BreakdownStrategy breakdownStrategy;
 
-    public TaskService(TaskRepository taskRepository, TaskParser taskParser) {
+    public TaskService(
+            TaskRepository taskRepository,
+            TaskParser taskParser,
+            BreakdownStrategy breakdownStrategy) {
+
         this.taskRepository = taskRepository;
         this.taskParser = taskParser;
+        this.breakdownStrategy = breakdownStrategy;
     }
 
     public Task createTask(TaskRequest request) {
@@ -59,18 +66,29 @@ public class TaskService {
 
     public boolean deleteTask(int id) {
 
-        Task task = getTask(id);
+        Task task = taskRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Task not found"));
 
-        // Delete subtasks along with their parent.
-        List<Task> tasks = taskRepository.findAll();
-
-        for (Task existingTask : tasks) {
-            if (existingTask.getParentId() == id) {
-                taskRepository.delete(existingTask.getId());
-            }
+        if (task.getParentId() <= 0) {
+            throw new ValidationException(
+                    "Parent ID",
+                    "Cannot delete a subtask independently"
+            );
         }
 
-        return taskRepository.delete(task.getId());
+        List<Task> subtasks = taskRepository.findAll()
+                .stream()
+                .filter(subtask -> subtask.getParentId() > 0
+                        && subtask.getParentId() == id)
+                .toList();
+
+        for (Task subtask : subtasks) {
+            taskRepository.delete(subtask.getId());
+        }
+
+        taskRepository.delete(id);
+
+        return true;
     }
 
     public Task createTaskFromText(String text, String idempotencyKey) {
@@ -174,5 +192,103 @@ public class TaskService {
                 .dueDate(dueDate)
                 .priority(taskPriority)
                 .build();
+    }
+
+    public Task createSubtask(int parentId, TaskRequest request) {
+
+        Task parent = taskRepository.findById(parentId)
+                .orElseThrow(() -> new NotFoundException("Parent task not found"));
+
+        if (parent.getParentId() <= 0) {
+            throw new ValidationException(
+                    "Parent ID",
+                    "A subtask cannot have its own subtasks"
+            );
+        }
+
+        TaskDraft draft = validateAndCreateDraft(request);
+
+        draft = new TaskDraft.Builder(
+                draft.getTitle(),
+                draft.getDescription(),
+                draft.isCompleted())
+                .dueDate(draft.getDueDate())
+                .priority(draft.getPriority())
+                .parentId(parentId)
+                .build();
+
+        return taskRepository.save(draft);
+    }
+
+    public List<Task> listSubtasks(int parentId) {
+
+        Task parent = taskRepository.findById(parentId)
+                .orElseThrow(() -> new NotFoundException("Task not found"));
+
+        return taskRepository.findAll()
+                .stream()
+                .filter(task -> task.getParentId() > 0
+                        && task.getParentId() == parentId)
+                .toList();
+    }
+
+    public List<Task> breakDownTask(int id, String idempotencyKey) {
+
+        Task parent = taskRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Task not found"));
+
+        if (parent.getParentId() <= 0) {
+            throw new ValidationException(
+                    "Parent ID",
+                    "A subtask cannot be broken down"
+            );
+        }
+
+        List<TaskRequest> requests =
+                breakdownStrategy.breakDown(
+                        parent.getTitle() + ": " + parent.getDescription()
+                );
+
+        if (requests == null || requests.isEmpty()) {
+            throw new BadGatewayException(
+                    "No subtasks were generated"
+            );
+        }
+
+        // Validate every generated request before saving anything.
+        List<TaskDraft> drafts = new ArrayList<>();
+
+        for (TaskRequest request : requests) {
+
+            try {
+                TaskDraft draft = validateAndCreateDraft(request);
+
+                TaskDraft subtaskDraft = new TaskDraft.Builder(
+                    draft.getTitle(),
+                    draft.getDescription(),
+                    draft.isCompleted()
+                )
+                .dueDate(draft.getDueDate())
+                .priority(draft.getPriority())
+                .parentId(id)
+                .build();
+
+                drafts.add(subtaskDraft);
+
+            } catch (ValidationException e) {
+                throw new BadGatewayException(
+                        "LLM generated invalid subtasks"
+                );
+            }
+        }
+
+        // Save only after all generated subtasks pass validation.
+        List<Task> subtasks = new ArrayList<>();
+
+        for (TaskDraft draft : drafts) {
+            subtasks.add(taskRepository.save(draft));
+        }
+
+        return subtasks;
     }
 }
