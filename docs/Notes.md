@@ -1,2 +1,0 @@
-* Update API_CONTRACT_TEMPLATE.
-* 

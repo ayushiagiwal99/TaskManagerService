@@ -1,11 +1,12 @@
 package com.taskManagerService.service;
 
 import com.taskManagerService.exception.*;
+import com.taskManagerService.filters.*;
+import com.taskManagerService.listener.TaskEventListener;
 import com.taskManagerService.model.Task;
 import com.taskManagerService.model.TaskDraft;
 import com.taskManagerService.enums.TaskPriority;
 import com.taskManagerService.model.TaskRequest;
-import com.taskManagerService.model.TaskQuery;
 import com.taskManagerService.parser.BreakdownStrategy;
 import com.taskManagerService.parser.TaskParser;
 import com.taskManagerService.parser.ParsedTask;
@@ -24,6 +25,14 @@ public class TaskService {
     private final TaskParser taskParser;
     private final BreakdownStrategy breakdownStrategy;
 
+    private final List<TaskFilter> filters = List.of(
+            new CompletedFilter(),
+            new PriorityFilter(),
+            new SearchFilter()
+    );
+
+    private final List<TaskEventListener> listeners = new ArrayList<>();
+
     public TaskService(
             TaskRepository taskRepository,
             TaskParser taskParser,
@@ -34,11 +43,29 @@ public class TaskService {
         this.breakdownStrategy = breakdownStrategy;
     }
 
+    public void addListener(TaskEventListener listener) {
+        listeners.add(listener);
+    }
+
+    public void removeListener(TaskEventListener listener) {
+        listeners.remove(listener);
+    }
+
+    private void notifyListeners(String eventType, Task task) {
+        for (TaskEventListener listener : new ArrayList<>(listeners)) {
+            listener.onEvent(eventType, task);
+        }
+    }
+
     public Task createTask(TaskRequest request) {
 
         TaskDraft draft = validateAndCreateDraft(request);
 
-        return taskRepository.save(draft);
+        Task task = taskRepository.save(draft);
+
+        notifyListeners("CREATED", task);
+
+        return task;
     }
 
     public Task getTask(int id) {
@@ -49,8 +76,40 @@ public class TaskService {
 
     public List<Task> listTasks(TaskQuery query) {
 
-        // Filtering and pagination will be implemented in Step 7.
-        return taskRepository.findAll();
+        // Get all tasks.
+        List<Task> tasks = new ArrayList<>(taskRepository.findAll());
+
+        // Apply all filters.
+        tasks = tasks.stream()
+                .filter(task -> filters.stream()
+                        .allMatch(filter -> filter.matches(task, query)))
+                .toList();
+
+        // Apply sorting.
+        SortStrategy sortStrategy = SortStrategyFactory.getStrategy(
+                query.getSortBy(),
+                query.getOrder()
+        );
+
+        if (sortStrategy != null) {
+            tasks = tasks.stream()
+                    .sorted(sortStrategy.getComparator())
+                    .toList();
+        }
+
+        // Apply pagination.
+        int startIndex = (query.getPage() - 1) * query.getPageSize();
+
+        if (startIndex >= tasks.size()) {
+            return List.of();
+        }
+
+        int endIndex = Math.min(
+                startIndex + query.getPageSize(),
+                tasks.size()
+        );
+
+        return tasks.subList(startIndex, endIndex);
     }
 
     public Task updateTask(int id, TaskRequest request) {
@@ -59,9 +118,17 @@ public class TaskService {
 
         TaskDraft draft = validateAndCreateDraft(request);
 
-        Task updatedTask = Task.createUpdatedTask(existingTask, draft);
+        Task updatedTaskDraft = Task.createUpdatedTask(existingTask, draft);
 
-        return taskRepository.update(updatedTask);
+        Task updatedTask = taskRepository.update(updatedTaskDraft);
+
+        if (!existingTask.isCompleted() && updatedTask.isCompleted()) {
+            notifyListeners("COMPLETED", updatedTask);
+        } else {
+            notifyListeners("UPDATED", updatedTask);
+        }
+
+        return updatedTask;
     }
 
     public boolean deleteTask(int id) {
@@ -87,6 +154,8 @@ public class TaskService {
         }
 
         taskRepository.delete(id);
+
+        notifyListeners("DELETED", task);
 
         return true;
     }
@@ -290,5 +359,26 @@ public class TaskService {
         }
 
         return subtasks;
+    }
+
+    public List<Task> listByPriority(String level) {
+
+        TaskPriority priority;
+
+        try {
+            priority = TaskPriority.valueOf(level.toUpperCase());
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ValidationException("Priority Level", "Invalid priority level");
+        }
+
+        TaskQuery query = TaskQuery.builder()
+                .priority(priority)
+                .build();
+
+        // Return all matching tasks rather than only the first page.
+        return taskRepository.findAll()
+                .stream()
+                .filter(task -> task.getPriority() == priority)
+                .toList();
     }
 }
